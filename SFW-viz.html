@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8"  name="author" content="Vid Podpečan (vid.podpecan@ijs.si)"/>
+    <title>Soil food web and soil processes</title>
+    <!-- Bootstrap CSS CDN -->
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    />
+    <!-- vis-network CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Select2 CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/verge@1.10.2/verge.min.js"></script>
+
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      .container-fluid {
+        height: 100%;
+      }
+      /* Left controls panel */
+      #controls {
+        background-color: #f8f9fa;
+        border-right: 1px solid #ccc;
+        padding: 20px;
+        height: 100%;
+      }
+      /* Right panel for network visualization */
+      #networkCanvas {
+        height: 99%;
+        border: 1px solid #ccc;
+      }
+      .select2-results__option {
+        padding: 4px 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row h-100">
+        <!-- Left Panel: Controls -->
+        <div id="controls" class="col-md-2">
+          <h4>Soil Processes</h4>
+          <p>Select up to 7 processes:</p>
+          <!-- The list contains more than 5 process options. -->
+          <select id="processSelect" name="processSelect" multiple style="width: 100%;">
+                    <option value="Food web assimilation">Food web assimilation</option>
+                    <option value="Fragmentation">Fragmentation</option>
+                    <option value="Bioaccumulation">Bioaccumulation</option>
+                    <option value="Bioturbation">Bioturbation</option>
+                    <option value="Macropore formation">Macropore formation</option>
+                    <option value="Nitrogen transformations">Nitrogen transformations</option>
+                    <option value="Plant metabolism enhancement">Plant metabolism enhancement</option>
+                    <option value="Methanogenesis">Methanogenesis</option>
+                    <option value="Methanotrophy">Methanotrophy</option>
+                    <option value="Nitrogen fixation">Nitrogen fixation</option>
+                    <option value="Sulphur transformations">Sulphur transformations</option>
+                    <option value="Aggregation">Aggregation</option>
+                    <option value="Antibiosis">Antibiosis</option>
+                    <option value="Competition">Competition</option>
+                    <option value="Exudation">Exudation</option>
+                    <option value="Microbial respiration">Microbial respiration</option>
+                    <option value="Mineralisation">Mineralisation</option>
+                    <option value="Resistance & defence">Resistance & defence</option>
+                    <option value="Parasitism">Parasitism</option>
+                    <option value="Mycorrhizal acquisition">Mycorrhizal acquisition</option>
+                    <option value="Root foraging">Root foraging</option>
+            </select>
+        </div>
+        <!-- Right Panel: Network Visualization -->
+        <div id="networkViewContainer" class="col-md-10">
+          <div id="networkCanvas"></div>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- jQuery (required by Select2) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- vis-network library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js" integrity="sha512-iTgTmIgxyA2YehKNVbzLJx4j9SnuC5ihtRrtxVkXH/9nF3vXBN5YeNQp+6wufBWKD3u+roHVNOvWBMufQnBbug==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>       <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+      /***************************************************
+       * Global Variables & Helper Functions
+       ***************************************************/
+      // Fixed palette of 5 available pastel colors.
+//       const palette = ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff"];
+
+
+        function scale() {
+            $('#networkCanvas').height(verge.viewportH()-15);
+            $('#networkCanvas').width($('#networkViewContainer').width());
+        }
+
+
+
+      const palette = ["#e0c3a8","#aac4e2","#cbe1bc","#d1bbdf","#99c0af","#e6b7bf","#a7dde2"]
+
+      // Mapping from process name to its reserved color.
+      var selectedColorsMapping = {}; // e.g. { "Nitrification": "#fdffb6", ... }
+
+      // Helper to wrap a text string into lines of at most maxChars characters.
+      function wrapText(text, maxChars) {
+        let lines = [];
+        for (let i = 0; i < text.length; i += maxChars) {
+          lines.push(text.substring(i, i + maxChars));
+        }
+        return lines;
+      }
+
+      // Global variable to hold currently selected process names.
+      let currentSelectedProcesses = [];
+
+      // Update the color mapping:
+      // For each process in currentSelectedProcesses, if not already assigned a color, assign
+      // the first available color from the palette (i.e. one not yet in selectedColorsMapping).
+      // Also remove mapping for any process that is no longer selected.
+      function updateSelectedColorsMapping() {
+        // Remove keys not in currentSelectedProcesses.
+        for (const proc in selectedColorsMapping) {
+          if (!currentSelectedProcesses.includes(proc)) {
+            delete selectedColorsMapping[proc];
+          }
+        }
+        // Assign a color to any new process.
+        for (let proc of currentSelectedProcesses) {
+          if (!(proc in selectedColorsMapping)) {
+            // Find the first color in palette that isn't used.
+            const usedColors = Object.values(selectedColorsMapping);
+            const available = palette.find(color => !usedColors.includes(color));
+            if (available) {
+              selectedColorsMapping[proc] = available;
+            } else {
+                console.log("No colors remain!");
+              // Fallback if, for some reason, no available color remains.
+              selectedColorsMapping[proc] = "#ccc";
+            }
+          }
+        }
+      }
+
+      /***************************************************
+       * vis-network Setup
+       ***************************************************/
+const nodesArray = [
+
+{ id: 0, myLabel: "Primary (autotrophic) producer plant", level: 0, associatedProcesses: ['Root foraging', 'Macropore formation', 'Aggregation', 'Exudation', 'Plant metabolism enhancement'] },
+{ id: 1, myLabel: "Plant-feeding nematode", level: 1, associatedProcesses: ['Resistance & defence'] },
+{ id: 2, myLabel: "Macrophytophage and panphytophage mite", level: 1, associatedProcesses: ['Fragmentation'] },
+{ id: 3, myLabel: "Plant feeding insect", level: 1, associatedProcesses: ['Resistance & defence'] },
+{ id: 4, myLabel: "Plant-feeding ant", level: 1, associatedProcesses: ['Macropore formation', 'Bioturbation', 'Bioaccumulation'] },
+{ id: 5, myLabel: "Plant feeding Coleoptera", level: 1, associatedProcesses: ['Bioaccumulation'] },
+{ id: 6, myLabel: "Plant feeding Diplura", level: 1, associatedProcesses: ['Bioaccumulation'] },
+{ id: 7, myLabel: "Plant feeding Isopoda", level: 1, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 8, myLabel: "Plant feeding Millipede", level: 1, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 9, myLabel: "Fungivore nematode", level: 1, associatedProcesses: ['Food web assimilation'] },
+{ id: 10, myLabel: "Microphytophage mite (feeding on fungi)", level: 1, associatedProcesses: ['Food web assimilation'] },
+{ id: 11, myLabel: "Fungivore ant", level: 1, associatedProcesses: ['Macropore formation', 'Bioturbation', 'Bioaccumulation'] },
+{ id: 12, myLabel: "Fungivore Collembola", level: 1, associatedProcesses: ['Food web assimilation', 'Bioaccumulation'] },
+{ id: 13, myLabel: "Fungivore Diplura", level: 1, associatedProcesses: ['Bioaccumulation'] },
+{ id: 14, myLabel: "Fungivore Isopoda", level: 1, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 15, myLabel: "Fungivore enchytraeid", level: 1, associatedProcesses: ['Fragmentation', 'Aggregation', 'Bioturbation', 'Food web assimilation', 'Bioaccumulation'] },
+{ id: 16, myLabel: "Fungivore Protozoa", level: 1, associatedProcesses: ['Food web assimilation', 'Microbial respiration'] },
+{ id: 17, myLabel: "Bacterivore nematode", level: 1, associatedProcesses: ['Food web assimilation'] },
+{ id: 18, myLabel: "Bacterivore mite", level: 1, associatedProcesses: ['Food web assimilation'] },
+{ id: 19, myLabel: "Bacterivore Collembola", level: 1, associatedProcesses: ['Food web assimilation', 'Bioaccumulation'] },
+{ id: 20, myLabel: "Bacterivore Isopoda", level: 1, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 21, myLabel: "Bacterivore enchytraeid", level: 1, associatedProcesses: ['Fragmentation', 'Aggregation', 'Bioturbation', 'Food web assimilation', 'Bioaccumulation'] },
+{ id: 22, myLabel: "Bacterivore Protozoa", level: 1, associatedProcesses: ['Food web assimilation', 'Microbial respiration'] },
+{ id: 23, myLabel: "Archaea", level: 0, associatedProcesses: ['Nitrogen fixation', 'Sulphur transformations', 'Nitrogen transformations', 'Methanogenesis', 'Methanotrophy', 'Plant metabolism enhancement'] },
+{ id: 24, myLabel: "Bacteria", level: 0, associatedProcesses: ['Microbial respiration', 'Nitrogen fixation', 'Plant metabolism enhancement', 'Sulphur transformations', 'Resistance & defence', 'Antibiosis', 'Aggregation', 'Mineralisation', 'Nitrogen transformations', 'Food web assimilation', 'Exudation', 'Parasitism', 'Competition', 'Methanotrophy', 'Bioaccumulation'] },
+{ id: 25, myLabel: "Passive lifestage, substrate-related nematode", level: 0, associatedProcesses: [] },
+{ id: 26, myLabel: "Substrate-inhabiting enchytraeid", level: 1, associatedProcesses: ['Fragmentation', 'Aggregation', 'Bioturbation', 'Food web assimilation', 'Bioaccumulation'] },
+{ id: 27, myLabel: "Substrate-ingesting earthworm", level: 1, associatedProcesses: ['Fragmentation', 'Aggregation', 'Bioturbation', 'Food web assimilation', 'Macropore formation', 'Bioaccumulation'] },
+{ id: 28, myLabel: "Primary (heterotrophic) producer fungi", level: 0, associatedProcesses: ['Microbial respiration', 'Plant metabolism enhancement', 'Sulphur transformations', 'Resistance & defence', 'Root foraging', 'Antibiosis', 'Mineralisation', 'Aggregation', 'Nitrogen transformations', 'Food web assimilation', 'Mycorrhizal acquisition', 'Exudation', 'Parasitism', 'Competition'] },
+{ id: 29, myLabel: "Primary (heterotrophic) consumer Oomycetes", level: 1, associatedProcesses: ['Resistance & defence'] },
+{ id: 30, myLabel: "Predatory nematode (consuming nematodes)", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 31, myLabel: "Predatory mite (attacking nematodes)", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 32, myLabel: "Predatory Collembola (attacking nematodes)", level: 3, associatedProcesses: ['Food web assimilation', 'Bioaccumulation'] },
+{ id: 33, myLabel: "Predatory Protozoa (attacking nematodes)", level: 2, associatedProcesses: ['Food web assimilation', 'Microbial respiration'] },
+{ id: 34, myLabel: "Predatory mite (attacking arthropods)", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 35, myLabel: "Predatory Coleoptera (attacking arthropods)", level: 3, associatedProcesses: ['Bioaccumulation'] },
+{ id: 36, myLabel: "Generalist mite", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 37, myLabel: "Predatory insect", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 38, myLabel: "Generalist (predatory) Coleoptera", level: 3, associatedProcesses: ['Bioaccumulation'] },
+{ id: 39, myLabel: "Predatory Millipede", level: 2, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 40, myLabel: "Spiders (general predator)", level: 3, associatedProcesses: ['Food web assimilation', 'Bioaccumulation'] },
+{ id: 41, myLabel: "Omnivore nematode", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 42, myLabel: "Omnivore mite", level: 2, associatedProcesses: ['Food web assimilation'] },
+{ id: 43, myLabel: "Omnivore ant", level: 3, associatedProcesses: ['Macropore formation', 'Bioturbation', 'Bioaccumulation'] },
+{ id: 44, myLabel: "Omnivore Coleoptera", level: 3, associatedProcesses: ['Bioaccumulation'] },
+{ id: 45, myLabel: "Omnivore Collembola", level: 2, associatedProcesses: ['Food web assimilation', 'Bioaccumulation'] },
+{ id: 46, myLabel: "Omnivore Diplura", level: 2, associatedProcesses: ['Bioaccumulation'] },
+{ id: 47, myLabel: "Omnivore Millipede", level: 2, associatedProcesses: ['Fragmentation', 'Bioaccumulation'] },
+{ id: 48, myLabel: "Omnivore Protozoa", level: 2, associatedProcesses: ['Food web assimilation', 'Microbial respiration'] },
+{ id: 49, myLabel: "Parasitic nematode", level: 2, associatedProcesses: ['Parasitism'] },
+{ id: 50, myLabel: "Predatory mite (parasitizing mites and nematodes)", level: 3, associatedProcesses: ['Food web assimilation'] },
+{ id: 51, myLabel: "Insect attacking apex parasitoid", level: 2, associatedProcesses: ['Parasitism'] }
+]
+
+
+const edgesArray = [
+{ from: 0, to: 1 },
+{ from: 0, to: 2 },
+{ from: 0, to: 3 },
+{ from: 0, to: 4 },
+{ from: 0, to: 5 },
+{ from: 0, to: 6 },
+{ from: 0, to: 7 },
+{ from: 0, to: 8 },
+{ from: 0, to: 29 },
+{ from: 0, to: 36 },
+{ from: 0, to: 37 },
+{ from: 0, to: 40 },
+{ from: 0, to: 41 },
+{ from: 0, to: 42 },
+{ from: 0, to: 43 },
+{ from: 0, to: 44 },
+{ from: 0, to: 45 },
+{ from: 0, to: 46 },
+{ from: 0, to: 47 },
+{ from: 1, to: 30 },
+{ from: 1, to: 31 },
+{ from: 1, to: 32 },
+{ from: 1, to: 33 },
+{ from: 1, to: 36 },
+{ from: 1, to: 37 },
+{ from: 1, to: 41 },
+{ from: 1, to: 42 },
+{ from: 1, to: 45 },
+{ from: 1, to: 48 },
+{ from: 1, to: 50 },
+{ from: 2, to: 34 },
+{ from: 2, to: 35 },
+{ from: 2, to: 36 },
+{ from: 2, to: 37 },
+{ from: 2, to: 38 },
+{ from: 2, to: 39 },
+{ from: 2, to: 40 },
+{ from: 2, to: 42 },
+{ from: 2, to: 43 },
+{ from: 2, to: 44 },
+{ from: 2, to: 45 },
+{ from: 2, to: 46 },
+{ from: 2, to: 47 },
+{ from: 2, to: 50 },
+{ from: 2, to: 51 },
+{ from: 3, to: 34 },
+{ from: 3, to: 35 },
+{ from: 3, to: 36 },
+{ from: 3, to: 37 },
+{ from: 3, to: 38 },
+{ from: 3, to: 39 },
+{ from: 3, to: 40 },
+{ from: 3, to: 42 },
+{ from: 3, to: 43 },
+{ from: 3, to: 44 },
+{ from: 3, to: 45 },
+{ from: 3, to: 46 },
+{ from: 3, to: 47 },
+{ from: 3, to: 49 },
+{ from: 3, to: 51 },
+{ from: 4, to: 34 },
+{ from: 4, to: 35 },
+{ from: 4, to: 36 },
+{ from: 4, to: 37 },
+{ from: 4, to: 38 },
+{ from: 4, to: 39 },
+{ from: 4, to: 40 },
+{ from: 4, to: 42 },
+{ from: 4, to: 43 },
+{ from: 4, to: 44 },
+{ from: 4, to: 45 },
+{ from: 4, to: 46 },
+{ from: 4, to: 47 },
+{ from: 4, to: 51 },
+{ from: 5, to: 34 },
+{ from: 5, to: 35 },
+{ from: 5, to: 36 },
+{ from: 5, to: 37 },
+{ from: 5, to: 38 },
+{ from: 5, to: 39 },
+{ from: 5, to: 40 },
+{ from: 5, to: 42 },
+{ from: 5, to: 43 },
+{ from: 5, to: 44 },
+{ from: 5, to: 45 },
+{ from: 5, to: 46 },
+{ from: 5, to: 47 },
+{ from: 5, to: 51 },
+{ from: 6, to: 34 },
+{ from: 6, to: 35 },
+{ from: 6, to: 36 },
+{ from: 6, to: 37 },
+{ from: 6, to: 38 },
+{ from: 6, to: 39 },
+{ from: 6, to: 40 },
+{ from: 6, to: 42 },
+{ from: 6, to: 43 },
+{ from: 6, to: 44 },
+{ from: 6, to: 45 },
+{ from: 6, to: 46 },
+{ from: 6, to: 47 },
+{ from: 6, to: 51 },
+{ from: 7, to: 34 },
+{ from: 7, to: 35 },
+{ from: 7, to: 36 },
+{ from: 7, to: 37 },
+{ from: 7, to: 38 },
+{ from: 7, to: 39 },
+{ from: 7, to: 40 },
+{ from: 7, to: 42 },
+{ from: 7, to: 43 },
+{ from: 7, to: 44 },
+{ from: 7, to: 45 },
+{ from: 7, to: 46 },
+{ from: 7, to: 47 },
+{ from: 7, to: 51 },
+{ from: 8, to: 34 },
+{ from: 8, to: 35 },
+{ from: 8, to: 36 },
+{ from: 8, to: 37 },
+{ from: 8, to: 38 },
+{ from: 8, to: 39 },
+{ from: 8, to: 40 },
+{ from: 8, to: 42 },
+{ from: 8, to: 43 },
+{ from: 8, to: 44 },
+{ from: 8, to: 45 },
+{ from: 8, to: 46 },
+{ from: 8, to: 47 },
+{ from: 8, to: 51 },
+{ from: 9, to: 30 },
+{ from: 9, to: 31 },
+{ from: 9, to: 32 },
+{ from: 9, to: 33 },
+{ from: 9, to: 36 },
+{ from: 9, to: 37 },
+{ from: 9, to: 39 },
+{ from: 9, to: 41 },
+{ from: 9, to: 42 },
+{ from: 9, to: 45 },
+{ from: 9, to: 48 },
+{ from: 9, to: 50 },
+{ from: 10, to: 35 },
+{ from: 10, to: 36 },
+{ from: 10, to: 37 },
+{ from: 10, to: 38 },
+{ from: 10, to: 39 },
+{ from: 10, to: 40 },
+{ from: 10, to: 42 },
+{ from: 10, to: 43 },
+{ from: 10, to: 44 },
+{ from: 10, to: 45 },
+{ from: 10, to: 46 },
+{ from: 10, to: 47 },
+{ from: 10, to: 50 },
+{ from: 11, to: 34 },
+{ from: 11, to: 35 },
+{ from: 11, to: 36 },
+{ from: 11, to: 37 },
+{ from: 11, to: 38 },
+{ from: 11, to: 39 },
+{ from: 11, to: 40 },
+{ from: 11, to: 42 },
+{ from: 11, to: 43 },
+{ from: 11, to: 44 },
+{ from: 11, to: 45 },
+{ from: 11, to: 46 },
+{ from: 11, to: 47 },
+{ from: 11, to: 51 },
+{ from: 12, to: 34 },
+{ from: 12, to: 35 },
+{ from: 12, to: 36 },
+{ from: 12, to: 37 },
+{ from: 12, to: 38 },
+{ from: 12, to: 39 },
+{ from: 12, to: 40 },
+{ from: 12, to: 42 },
+{ from: 12, to: 43 },
+{ from: 12, to: 44 },
+{ from: 12, to: 45 },
+{ from: 12, to: 46 },
+{ from: 12, to: 47 },
+{ from: 12, to: 51 },
+{ from: 13, to: 34 },
+{ from: 13, to: 35 },
+{ from: 13, to: 36 },
+{ from: 13, to: 37 },
+{ from: 13, to: 38 },
+{ from: 13, to: 39 },
+{ from: 13, to: 40 },
+{ from: 13, to: 42 },
+{ from: 13, to: 43 },
+{ from: 13, to: 44 },
+{ from: 13, to: 45 },
+{ from: 13, to: 46 },
+{ from: 13, to: 47 },
+{ from: 13, to: 51 },
+{ from: 14, to: 34 },
+{ from: 14, to: 35 },
+{ from: 14, to: 36 },
+{ from: 14, to: 37 },
+{ from: 14, to: 38 },
+{ from: 14, to: 39 },
+{ from: 14, to: 40 },
+{ from: 14, to: 42 },
+{ from: 14, to: 43 },
+{ from: 14, to: 44 },
+{ from: 14, to: 45 },
+{ from: 14, to: 46 },
+{ from: 14, to: 47 },
+{ from: 14, to: 51 },
+{ from: 15, to: 36 },
+{ from: 15, to: 37 },
+{ from: 15, to: 42 },
+{ from: 15, to: 43 },
+{ from: 16, to: 41 },
+{ from: 17, to: 30 },
+{ from: 17, to: 31 },
+{ from: 17, to: 32 },
+{ from: 17, to: 33 },
+{ from: 17, to: 36 },
+{ from: 17, to: 37 },
+{ from: 17, to: 41 },
+{ from: 17, to: 42 },
+{ from: 17, to: 45 },
+{ from: 17, to: 48 },
+{ from: 17, to: 50 },
+{ from: 18, to: 34 },
+{ from: 18, to: 35 },
+{ from: 18, to: 36 },
+{ from: 18, to: 37 },
+{ from: 18, to: 38 },
+{ from: 18, to: 39 },
+{ from: 18, to: 40 },
+{ from: 18, to: 42 },
+{ from: 18, to: 43 },
+{ from: 18, to: 44 },
+{ from: 18, to: 45 },
+{ from: 18, to: 46 },
+{ from: 18, to: 47 },
+{ from: 18, to: 50 },
+{ from: 19, to: 34 },
+{ from: 19, to: 35 },
+{ from: 19, to: 36 },
+{ from: 19, to: 37 },
+{ from: 19, to: 38 },
+{ from: 19, to: 39 },
+{ from: 19, to: 40 },
+{ from: 19, to: 42 },
+{ from: 19, to: 43 },
+{ from: 19, to: 44 },
+{ from: 19, to: 45 },
+{ from: 19, to: 46 },
+{ from: 19, to: 47 },
+{ from: 20, to: 34 },
+{ from: 20, to: 35 },
+{ from: 20, to: 36 },
+{ from: 20, to: 37 },
+{ from: 20, to: 38 },
+{ from: 20, to: 39 },
+{ from: 20, to: 40 },
+{ from: 20, to: 42 },
+{ from: 20, to: 43 },
+{ from: 20, to: 44 },
+{ from: 20, to: 45 },
+{ from: 20, to: 46 },
+{ from: 20, to: 47 },
+{ from: 21, to: 36 },
+{ from: 21, to: 37 },
+{ from: 21, to: 42 },
+{ from: 21, to: 43 },
+{ from: 22, to: 41 },
+{ from: 23, to: 17 },
+{ from: 23, to: 18 },
+{ from: 23, to: 19 },
+{ from: 23, to: 20 },
+{ from: 23, to: 21 },
+{ from: 23, to: 22 },
+{ from: 23, to: 26 },
+{ from: 23, to: 27 },
+{ from: 23, to: 41 },
+{ from: 23, to: 45 },
+{ from: 23, to: 46 },
+{ from: 23, to: 48 },
+{ from: 24, to: 17 },
+{ from: 24, to: 18 },
+{ from: 24, to: 19 },
+{ from: 24, to: 20 },
+{ from: 24, to: 21 },
+{ from: 24, to: 22 },
+{ from: 24, to: 26 },
+{ from: 24, to: 27 },
+{ from: 24, to: 41 },
+{ from: 24, to: 45 },
+{ from: 24, to: 46 },
+{ from: 24, to: 48 },
+{ from: 25, to: 30 },
+{ from: 25, to: 31 },
+{ from: 25, to: 32 },
+{ from: 25, to: 33 },
+{ from: 25, to: 36 },
+{ from: 25, to: 37 },
+{ from: 25, to: 41 },
+{ from: 25, to: 42 },
+{ from: 25, to: 45 },
+{ from: 25, to: 48 },
+{ from: 25, to: 50 },
+{ from: 26, to: 36 },
+{ from: 26, to: 37 },
+{ from: 26, to: 42 },
+{ from: 26, to: 43 },
+{ from: 27, to: 43 },
+{ from: 28, to: 9 },
+{ from: 28, to: 10 },
+{ from: 28, to: 11 },
+{ from: 28, to: 12 },
+{ from: 28, to: 13 },
+{ from: 28, to: 14 },
+{ from: 28, to: 15 },
+{ from: 28, to: 16 },
+{ from: 28, to: 37 },
+{ from: 28, to: 38 },
+{ from: 28, to: 39 },
+{ from: 28, to: 41 },
+{ from: 28, to: 42 },
+{ from: 28, to: 43 },
+{ from: 28, to: 44 },
+{ from: 28, to: 45 },
+{ from: 28, to: 46 },
+{ from: 28, to: 47 },
+{ from: 28, to: 48 },
+{ from: 29, to: 9 },
+{ from: 29, to: 10 },
+{ from: 29, to: 11 },
+{ from: 29, to: 12 },
+{ from: 29, to: 13 },
+{ from: 29, to: 14 },
+{ from: 29, to: 15 },
+{ from: 29, to: 16 },
+{ from: 29, to: 37 },
+{ from: 29, to: 38 },
+{ from: 29, to: 39 },
+{ from: 29, to: 41 },
+{ from: 29, to: 42 },
+{ from: 29, to: 43 },
+{ from: 29, to: 44 },
+{ from: 29, to: 45 },
+{ from: 29, to: 46 },
+{ from: 29, to: 47 },
+{ from: 30, to: 30 },
+{ from: 30, to: 31 },
+{ from: 30, to: 32 },
+{ from: 30, to: 33 },
+{ from: 30, to: 36 },
+{ from: 30, to: 37 },
+{ from: 30, to: 41 },
+{ from: 30, to: 42 },
+{ from: 30, to: 45 },
+{ from: 30, to: 48 },
+{ from: 30, to: 50 },
+{ from: 31, to: 34 },
+{ from: 31, to: 35 },
+{ from: 31, to: 36 },
+{ from: 31, to: 37 },
+{ from: 31, to: 38 },
+{ from: 31, to: 39 },
+{ from: 31, to: 40 },
+{ from: 31, to: 43 },
+{ from: 31, to: 44 },
+{ from: 31, to: 45 },
+{ from: 31, to: 46 },
+{ from: 31, to: 47 },
+{ from: 31, to: 50 },
+{ from: 31, to: 51 },
+{ from: 32, to: 35 },
+{ from: 32, to: 37 },
+{ from: 32, to: 38 },
+{ from: 32, to: 40 },
+{ from: 32, to: 44 },
+{ from: 32, to: 46 },
+{ from: 33, to: 41 },
+{ from: 34, to: 34 },
+{ from: 34, to: 35 },
+{ from: 34, to: 36 },
+{ from: 34, to: 37 },
+{ from: 34, to: 38 },
+{ from: 34, to: 40 },
+{ from: 34, to: 43 },
+{ from: 34, to: 44 },
+{ from: 34, to: 45 },
+{ from: 34, to: 46 },
+{ from: 34, to: 47 },
+{ from: 34, to: 50 },
+{ from: 35, to: 35 },
+{ from: 35, to: 37 },
+{ from: 35, to: 38 },
+{ from: 35, to: 40 },
+{ from: 35, to: 44 },
+{ from: 35, to: 46 },
+{ from: 36, to: 36 },
+{ from: 36, to: 34 },
+{ from: 36, to: 35 },
+{ from: 36, to: 37 },
+{ from: 36, to: 38 },
+{ from: 36, to: 39 },
+{ from: 36, to: 40 },
+{ from: 36, to: 43 },
+{ from: 36, to: 44 },
+{ from: 36, to: 45 },
+{ from: 36, to: 46 },
+{ from: 36, to: 47 },
+{ from: 36, to: 50 },
+{ from: 36, to: 51 },
+{ from: 37, to: 37 },
+{ from: 37, to: 35 },
+{ from: 37, to: 38 },
+{ from: 37, to: 40 },
+{ from: 37, to: 44 },
+{ from: 37, to: 46 },
+{ from: 38, to: 38 },
+{ from: 38, to: 35 },
+{ from: 38, to: 37 },
+{ from: 38, to: 40 },
+{ from: 38, to: 44 },
+{ from: 38, to: 46 },
+{ from: 39, to: 35 },
+{ from: 39, to: 37 },
+{ from: 39, to: 38 },
+{ from: 39, to: 40 },
+{ from: 39, to: 44 },
+{ from: 39, to: 46 },
+{ from: 41, to: 41 },
+{ from: 41, to: 30 },
+{ from: 41, to: 31 },
+{ from: 41, to: 32 },
+{ from: 41, to: 33 },
+{ from: 41, to: 36 },
+{ from: 41, to: 37 },
+{ from: 41, to: 42 },
+{ from: 41, to: 45 },
+{ from: 41, to: 48 },
+{ from: 41, to: 50 },
+{ from: 42, to: 34 },
+{ from: 42, to: 35 },
+{ from: 42, to: 36 },
+{ from: 42, to: 37 },
+{ from: 42, to: 38 },
+{ from: 42, to: 39 },
+{ from: 42, to: 40 },
+{ from: 42, to: 43 },
+{ from: 42, to: 44 },
+{ from: 42, to: 45 },
+{ from: 42, to: 46 },
+{ from: 42, to: 47 },
+{ from: 42, to: 50 },
+{ from: 42, to: 51 },
+{ from: 43, to: 35 },
+{ from: 43, to: 37 },
+{ from: 43, to: 38 },
+{ from: 43, to: 40 },
+{ from: 43, to: 44 },
+{ from: 43, to: 46 },
+{ from: 44, to: 44 },
+{ from: 44, to: 35 },
+{ from: 44, to: 37 },
+{ from: 44, to: 38 },
+{ from: 44, to: 40 },
+{ from: 44, to: 46 },
+{ from: 45, to: 35 },
+{ from: 45, to: 37 },
+{ from: 45, to: 38 },
+{ from: 45, to: 40 },
+{ from: 45, to: 44 },
+{ from: 45, to: 46 },
+{ from: 46, to: 46 },
+{ from: 46, to: 35 },
+{ from: 46, to: 37 },
+{ from: 46, to: 38 },
+{ from: 46, to: 40 },
+{ from: 46, to: 44 },
+{ from: 47, to: 35 },
+{ from: 47, to: 37 },
+{ from: 47, to: 38 },
+{ from: 47, to: 40 },
+{ from: 47, to: 44 },
+{ from: 47, to: 46 },
+{ from: 48, to: 41 },
+{ from: 49, to: 30 },
+{ from: 49, to: 31 },
+{ from: 49, to: 32 },
+{ from: 49, to: 33 },
+{ from: 49, to: 36 },
+{ from: 49, to: 37 },
+{ from: 49, to: 41 },
+{ from: 49, to: 42 },
+{ from: 49, to: 45 },
+{ from: 49, to: 48 },
+{ from: 49, to: 50 },
+{ from: 50, to: 34 },
+{ from: 50, to: 35 },
+{ from: 50, to: 37 },
+{ from: 50, to: 38 },
+{ from: 50, to: 39 },
+{ from: 50, to: 40 },
+{ from: 50, to: 43 },
+{ from: 50, to: 44 },
+{ from: 50, to: 45 },
+{ from: 50, to: 46 },
+{ from: 50, to: 47 },
+{ from: 51, to: 40 }
+]
+
+      const nodes = new vis.DataSet(
+        nodesArray.map(node => ({
+          id: node.id,
+          myLabel: node.myLabel,
+          label: "", // suppress vis default label
+          level: node.level,
+          associatedProcesses: node.associatedProcesses,
+          shape: "box", // we draw nodes manually,
+          margin: 25,
+
+            color: {
+                border: '#ffffff',
+                background: '#ffffff',
+
+                highlight: {
+                    border: '#ffffff',
+                    background: '#ffffff'
+                },
+                hover: {
+                    border: '#ffffff',
+                    background: '#ffffff'
+                }
+
+
+            }
+
+        }))
+      );
+      const edges = new vis.DataSet(edgesArray);
+
+      const container = document.getElementById("networkCanvas");
+      const networkData = { nodes: nodes, edges: edges };
+      const networkOptions = {
+        layout: {
+          hierarchical: {
+            direction: "DU",
+            sortMethod: "directed",
+            nodeSpacing: 150,
+            levelSeparation: 250
+          }
+        },
+        edges: {
+          arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+          color: "#aaaaaa"
+        },
+        physics: { enabled: false },
+        nodes: { shape: "box" },
+        interaction: {
+            hover: true,
+            navigationButtons: true, // This enables the built-in navigation buttons (zoom, move, center)
+            zoomView: true, // Optional: allows zooming in/out with mouse wheel or pinch gestures
+            dragView: true // Optional: allows panning the view with the mouse
+
+            }
+      };
+      const network = new vis.Network(container, networkData, networkOptions);
+
+        // Global variables for hover highlighting
+        var hoveredNode = null;
+        var hoveredNeighbors = [];  // store all node IDs that are direct neighbours (targets) of the hovered node
+
+        // When the mouse hovers over a node…
+        network.on('hoverNode', function(params) {
+            hoveredNode = params.node;
+            // Using the edges dataset, find all targets (neighbors) of the hovered node.
+            hoveredNeighbors = [];
+            edges.forEach(function(edge) {
+            if (edge.from === hoveredNode && hoveredNeighbors.indexOf(edge.to) === -1) {
+                hoveredNeighbors.push(edge.to);
+            }
+            });
+            network.redraw();  // Force the custom drawing to update
+        });
+
+        // When the mouse leaves a node…
+        network.on('blurNode', function(params) {
+            hoveredNode = null;
+            hoveredNeighbors = [];
+            network.redraw();
+        });
+
+
+
+
+
+    // Helper function: draw an arrow head at the end of a line.
+    function drawArrowhead(ctx, from, to, color) {
+        var headlen = 15; // length of the arrow head in pixels
+        // Calculate angle of the line.
+        var angle = Math.atan2(to.y - from.y, to.x - from.x);
+        ctx.beginPath();
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(to.x - headlen * Math.cos(angle - Math.PI/6),
+                to.y - headlen * Math.sin(angle - Math.PI/6));
+        ctx.lineTo(to.x - headlen * Math.cos(angle + Math.PI/6),
+                to.y - headlen * Math.sin(angle + Math.PI/6));
+        ctx.lineTo(to.x, to.y);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+
+
+      /***************************************************
+       * Custom Node Drawing (with multiline label)
+       ***************************************************/
+      network.on("afterDrawing", function(ctx) {
+        const positions = network.getPositions();
+        const nodeWidth = 140, nodeHeight = 60;
+        const maxCharsPerLine = 15  // maximum characters per line for label wrapping
+        const lineHeight = 16;
+
+        nodes.forEach(function(node) {
+          const pos = positions[node.id];
+          if (!pos) return;
+          const x = pos.x, y = pos.y;
+          const left = x - nodeWidth / 2;
+          const top = y - nodeHeight / 2;
+
+          const right = left + nodeWidth;
+          const bottom = top + nodeHeight;
+
+
+          // Determine which of node's associated processes are selected.
+          const matching = node.associatedProcesses.filter(p =>
+            currentSelectedProcesses.includes(p)
+          );
+
+//                 console.log(node.myLabel);
+//                 console.log(node.associatedProcesses);
+//                 console.log(matching);
+//                 console.log(currentSelectedProcesses);
+
+          if (matching.length === 0) {
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(left, top, nodeWidth, nodeHeight);
+          } else if (matching.length === 1) {
+            // Use the mapped color (from our fixed palette) for the process.
+            ctx.fillStyle = selectedColorsMapping[matching[0]] || "#FFFFFF";
+            ctx.fillRect(left, top, nodeWidth, nodeHeight);
+          } else {
+            const stripeWidth = nodeWidth / matching.length;
+            matching.forEach((proc, index) => {
+              ctx.fillStyle = selectedColorsMapping[proc] || "#FFFFFF";
+              ctx.fillRect(left + index * stripeWidth, top, stripeWidth, nodeHeight);
+            });
+          }
+
+//           ctx.strokeStyle = "#333";
+//           ctx.lineWidth = 2;
+//           ctx.strokeRect(left, top, nodeWidth, nodeHeight);
+
+            if (node.id === hoveredNode || hoveredNeighbors.indexOf(node.id) > -1) {
+                ctx.strokeStyle = "red";    // highlight color
+                ctx.lineWidth = 4;           // thicker line
+            } else {
+                ctx.strokeStyle = "#333";
+                ctx.lineWidth = 2;
+            }
+            ctx.strokeRect(left, top, nodeWidth, nodeHeight);
+
+
+
+          // Draw wrapped label below the rectangle.
+          ctx.font = "14px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#000";
+          const lines = wrapText(node.myLabel, maxCharsPerLine);
+          let startY = y -10; //+ nodeHeight/2 + lineHeight;
+          lines.forEach(function(line, index) {
+            ctx.fillText(line, x, startY + index * lineHeight);
+          });
+
+
+            if (hoveredNode !== null) {
+            // Get the latest positions.
+            var currPositions = network.getPositions();
+            // Loop through all edges
+            edges.forEach(function(edge) {
+                var posFrom = currPositions[edge.from];
+                var posTo = currPositions[edge.to];
+                if (!posFrom || !posTo) return;
+
+                // Determine the style based on whether the edge is outgoing (from hoveredNode)
+                // or incoming (to hoveredNode). If both (self loop), you could choose one.
+                if (edge.from === hoveredNode && edge.to === hoveredNode) {
+                // Self-loop: you might choose one or mix the colors.
+                    ctx.beginPath();
+                    ctx.moveTo(posFrom.x, posFrom.y);
+                    ctx.lineTo(posTo.x, posTo.y);
+                    ctx.strokeStyle = "purple";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (edge.from === hoveredNode) {
+                    ctx.beginPath();
+                    ctx.moveTo(posFrom.x, posFrom.y);
+                    ctx.lineTo(posTo.x, posTo.y);
+                    ctx.strokeStyle = "red";  // Outgoing edge
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    drawArrowhead(ctx, posFrom, posTo, "red");
+                } else if (edge.to === hoveredNode) {
+                    ctx.beginPath();
+                    ctx.moveTo(posFrom.x, posFrom.y);
+                    ctx.lineTo(posTo.x, posTo.y);
+                    ctx.strokeStyle = "blue"; // Incoming edge
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    drawArrowhead(ctx, posFrom, posTo, "blue");
+                }
+            });
+            }
+
+        });
+      });
+
+
+
+      /***************************************************
+       * Select2 Setup for the Select Element
+       * Only the selected items are colored with our fixed palette.
+       ***************************************************/
+      $("#processSelect").select2({
+        placeholder: "Select processes",
+        maximumSelectionLength: 7,
+        width: 'resolve',
+        // The dropdown (results) just shows plain text.
+        templateResult: function(state) {
+          return state.text;
+        },
+        // For the selected chips, assign the color from our mapping.
+        templateSelection: function (state) {
+          if (!state.id) return state.text;
+          var color = selectedColorsMapping[state.id] || "#ccc";
+          var $state = $(
+            '<span style="background-color:' + color +
+            '; padding: 4px 6px; border: 1px solid black; font-weight:bold; border-radius:3px;">' +
+            state.text +
+            '</span>'
+          );
+          return $state;
+        }
+      });
+
+      /***************************************************
+       * Update Selection Mapping & Redraw on Change / Refresh
+       ***************************************************/
+      function updateMappingAndRedraw() {
+        currentSelectedProcesses = $("#processSelect").val() || [];
+        updateSelectedColorsMapping();
+        network.redraw();
+        // Also trigger Select2 update so the chips get refreshed.
+        $("#processSelect").trigger("change.select2");
+      }
+
+      $("#processSelect").on("change", function (e) {
+        updateMappingAndRedraw();
+      });
+
+      $(document).ready(function() {
+        currentSelectedProcesses = $("#processSelect").val() || [];
+        updateMappingAndRedraw();
+      });
+
+
+      $(window).resize(function () {
+        scale();
+     });
+
+     scale();
+
+    </script>
+  </body>
+</html>
