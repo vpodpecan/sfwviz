@@ -33,8 +33,10 @@
       #controls {
         background-color: #f8f9fa;
         border-right: 1px solid #ccc;
-        padding: 20px;
         height: 100%;
+      }
+      #controls-main {
+        padding: 20px 5px 20px 5px;
       }
       /* Right panel for network visualization */
       #networkCanvas {
@@ -50,34 +52,82 @@
     <div class="container-fluid">
       <div class="row h-100">
         <!-- Left Panel: Controls -->
-        <div id="controls" class="col-md-2">
-          <h4>Soil Processes</h4>
-          <p>Select up to 7 processes:</p>
-          <!-- The list contains more than 5 process options. -->
-          <select id="processSelect" name="processSelect" multiple style="width: 100%;">
-                    <option value="Food web assimilation">Food web assimilation</option>
-                    <option value="Fragmentation">Fragmentation</option>
-                    <option value="Bioaccumulation">Bioaccumulation</option>
-                    <option value="Bioturbation">Bioturbation</option>
-                    <option value="Macropore formation">Macropore formation</option>
-                    <option value="Nitrogen transformations">Nitrogen transformations</option>
-                    <option value="Plant metabolism enhancement">Plant metabolism enhancement</option>
-                    <option value="Methanogenesis">Methanogenesis</option>
-                    <option value="Methanotrophy">Methanotrophy</option>
-                    <option value="Nitrogen fixation">Nitrogen fixation</option>
-                    <option value="Sulphur transformations">Sulphur transformations</option>
-                    <option value="Aggregation">Aggregation</option>
-                    <option value="Antibiosis">Antibiosis</option>
-                    <option value="Competition">Competition</option>
-                    <option value="Exudation">Exudation</option>
-                    <option value="Microbial respiration">Microbial respiration</option>
-                    <option value="Mineralisation">Mineralisation</option>
-                    <option value="Resistance & defence">Resistance & defence</option>
-                    <option value="Parasitism">Parasitism</option>
-                    <option value="Mycorrhizal acquisition">Mycorrhizal acquisition</option>
-                    <option value="Root foraging">Root foraging</option>
-            </select>
+        <div id="controls" class="col-md-2 d-flex flex-column">
+
+          <div id="controls-main">
+            <h4>Soil Processes</h4>
+            <p>Select up to 7 processes:</p>
+            <!-- The list contains more than 5 process options. -->
+            <select id="processSelect" name="processSelect" multiple style="width: 100%;">
+                      <option value="Food web assimilation">Food web assimilation</option>
+                      <option value="Fragmentation">Fragmentation</option>
+                      <option value="Bioaccumulation">Bioaccumulation</option>
+                      <option value="Bioturbation">Bioturbation</option>
+                      <option value="Macropore formation">Macropore formation</option>
+                      <option value="Nitrogen transformations">Nitrogen transformations</option>
+                      <option value="Plant metabolism enhancement">Plant metabolism enhancement</option>
+                      <option value="Methanogenesis">Methanogenesis</option>
+                      <option value="Methanotrophy">Methanotrophy</option>
+                      <option value="Nitrogen fixation">Nitrogen fixation</option>
+                      <option value="Sulphur transformations">Sulphur transformations</option>
+                      <option value="Aggregation">Aggregation</option>
+                      <option value="Antibiosis">Antibiosis</option>
+                      <option value="Competition">Competition</option>
+                      <option value="Exudation">Exudation</option>
+                      <option value="Microbial respiration">Microbial respiration</option>
+                      <option value="Mineralisation">Mineralisation</option>
+                      <option value="Resistance & defence">Resistance & defence</option>
+                      <option value="Parasitism">Parasitism</option>
+                      <option value="Mycorrhizal acquisition">Mycorrhizal acquisition</option>
+                      <option value="Root foraging">Root foraging</option>
+              </select>
+          </div>
+          
+          <!-- <hr/> -->
+            <!-- <div class="container mt-5 p-0">
+              <div class="p-1">
+                  <h5 class="font-weight-bold">About Soil Processes</h5>
+                  <p class="text-muted small">
+                      The participation of soil organisms in soil processes was obtained from this publication: 
+                      <a href="https://www.sciencedirect.com/science/article/pii/S0038071722000189" target="_blank">The life of soils: Integrating the who and how of multifunctionality (2022)</a>
+                  </p>
+          
+                  <h5 class="font-weight-bold mt-4">About Soil Food Web</h5>
+                  <p class="text-muted small">
+                      The soil food web is an expansion of the version discussed in this publication: 
+                      <a href="https://example.com/befana-tool" target="_blank">BEFANA: A tool for biodiversity-ecosystem functioning assessment by network analysis (2022)</a>
+                  </p>
+              </div>
+          </div> -->
+
+
+            <!-- Text Box pushed to bottom -->
+            <div class="mt-auto mb-3 pb-1">
+              <h5 class="font-weight-bold">About Soil Processes</h5>
+              <p class="text-muted small">
+                  The participation of soil organisms in soil processes was obtained from this publication: 
+                  <a href="https://www.sciencedirect.com/science/article/pii/S0038071722000189" target="_blank">The life of soils: Integrating the who and how of multifunctionality</a>
+              </p>
+
+              <h5 class="font-weight-bold mt-4">About Soil Food Web</h5>
+              <p class="text-muted small">
+                  The soil food web is an expansion of the version discussed in this publication: 
+                  <a href="https://www.sciencedirect.com/science/article/pii/S0304380022001739" target="_blank">BEFANA: A tool for biodiversity-ecosystem functioning assessment by network analysis</a>
+              </p>
+
+
+              <div class="text-muted text-left pt-2" style="font-size: 0.7rem;">
+                Contact: <a href="mailto:vid.podpecan@ijs.si">Vid Podpečan</a>
+            </div>
+
+          </div>
+
+
         </div>
+
+
+
+
         <!-- Right Panel: Network Visualization -->
         <div id="networkViewContainer" class="col-md-10">
           <div id="networkCanvas"></div>
