@@ -18,6 +18,8 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/verge@1.10.2/verge.min.js"></script>
 
+    <script type="text/javascript" src="https://github.com/mirismaili/text-wrapper/releases/download/v2.0.2/bundle.umd.js"></script>
+
     <style>
       html,
       body {
@@ -105,6 +107,7 @@
         }
 
 
+      const wrapper = text_wrapper_lib.wrapper
 
       const palette = ["#e0c3a8","#aac4e2","#cbe1bc","#d1bbdf","#99c0af","#e6b7bf","#a7dde2"]
 
@@ -761,7 +764,7 @@ const edgesArray = [
           hierarchical: {
             direction: "DU",
             sortMethod: "directed",
-            nodeSpacing: 150,
+            nodeSpacing: 160,
             levelSeparation: 250
           }
         },
@@ -773,6 +776,7 @@ const edgesArray = [
         nodes: { shape: "box" },
         interaction: {
             hover: true,
+            hoverConnectedEdges: false,
             navigationButtons: true, // This enables the built-in navigation buttons (zoom, move, center)
             zoomView: true, // Optional: allows zooming in/out with mouse wheel or pinch gestures
             dragView: true // Optional: allows panning the view with the mouse
@@ -826,14 +830,13 @@ const edgesArray = [
     }
 
 
-
       /***************************************************
        * Custom Node Drawing (with multiline label)
        ***************************************************/
       network.on("afterDrawing", function(ctx) {
         const positions = network.getPositions();
-        const nodeWidth = 140, nodeHeight = 60;
-        const maxCharsPerLine = 15  // maximum characters per line for label wrapping
+        const nodeWidth = 150, nodeHeight = 60;
+        const maxCharsPerLine = 20  // maximum characters per line for label wrapping
         const lineHeight = 16;
 
         nodes.forEach(function(node) {
@@ -852,11 +855,6 @@ const edgesArray = [
             currentSelectedProcesses.includes(p)
           );
 
-//                 console.log(node.myLabel);
-//                 console.log(node.associatedProcesses);
-//                 console.log(matching);
-//                 console.log(currentSelectedProcesses);
-
           if (matching.length === 0) {
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(left, top, nodeWidth, nodeHeight);
@@ -871,10 +869,6 @@ const edgesArray = [
               ctx.fillRect(left + index * stripeWidth, top, stripeWidth, nodeHeight);
             });
           }
-
-//           ctx.strokeStyle = "#333";
-//           ctx.lineWidth = 2;
-//           ctx.strokeRect(left, top, nodeWidth, nodeHeight);
 
             if (node.id === hoveredNode || hoveredNeighbors.indexOf(node.id) > -1) {
                 ctx.strokeStyle = "red";    // highlight color
@@ -891,56 +885,49 @@ const edgesArray = [
           ctx.font = "14px sans-serif";
           ctx.textAlign = "center";
           ctx.fillStyle = "#000";
-          const lines = wrapText(node.myLabel, maxCharsPerLine);
+//           const lines = wrapText(node.myLabel, maxCharsPerLine);
+          const lines = wrapper(node.myLabel, {wrapOn: maxCharsPerLine}).split('\n');
+
           let startY = y -10; //+ nodeHeight/2 + lineHeight;
           lines.forEach(function(line, index) {
             ctx.fillText(line, x, startY + index * lineHeight);
           });
 
-
-            if (hoveredNode !== null) {
-            // Get the latest positions.
-            var currPositions = network.getPositions();
-            // Loop through all edges
-            edges.forEach(function(edge) {
-                var posFrom = currPositions[edge.from];
-                var posTo = currPositions[edge.to];
-                if (!posFrom || !posTo) return;
-
-                // Determine the style based on whether the edge is outgoing (from hoveredNode)
-                // or incoming (to hoveredNode). If both (self loop), you could choose one.
-                if (edge.from === hoveredNode && edge.to === hoveredNode) {
-                // Self-loop: you might choose one or mix the colors.
-                    ctx.beginPath();
-                    ctx.moveTo(posFrom.x, posFrom.y);
-                    ctx.lineTo(posTo.x, posTo.y);
-                    ctx.strokeStyle = "purple";
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                } else if (edge.from === hoveredNode) {
-                    ctx.beginPath();
-                    ctx.moveTo(posFrom.x, posFrom.y);
-                    ctx.lineTo(posTo.x, posTo.y);
-                    ctx.strokeStyle = "red";  // Outgoing edge
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    drawArrowhead(ctx, posFrom, posTo, "red");
-                } else if (edge.to === hoveredNode) {
-                    ctx.beginPath();
-                    ctx.moveTo(posFrom.x, posFrom.y);
-                    ctx.lineTo(posTo.x, posTo.y);
-                    ctx.strokeStyle = "blue"; // Incoming edge
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    drawArrowhead(ctx, posFrom, posTo, "blue");
-                }
-            });
-            }
-
         });
       });
 
 
+      network.on("beforeDrawing", function(ctx) {
+
+            var hoverPos = network.getPositions();
+            if (hoveredNode !== null) {
+            edges.forEach(function(edge) {
+                var posFrom = hoverPos[edge.from],
+                posTo = hoverPos[edge.to];
+                if (!posFrom || !posTo) return;
+                /* Outgoing edges (highlight in red). */
+                if (edge.from === hoveredNode) {
+                ctx.beginPath();
+                ctx.moveTo(posFrom.x, posFrom.y);
+                ctx.lineTo(posTo.x, posTo.y);
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                drawArrowhead(ctx, posFrom, posTo, "red");
+                }
+                /* Incoming edges (highlight in blue). */
+                if (edge.to === hoveredNode) {
+                ctx.beginPath();
+                ctx.moveTo(posFrom.x, posFrom.y);
+                ctx.lineTo(posTo.x, posTo.y);
+                ctx.strokeStyle = "blue";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                drawArrowhead(ctx, posFrom, posTo, "blue");
+                }
+            });
+            }
+        });
 
       /***************************************************
        * Select2 Setup for the Select Element
